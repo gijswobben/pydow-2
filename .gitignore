@@ -108,3 +108,4 @@ repositories/
 test-reports/
 logs.json
 .coveragerc
+test_env/
