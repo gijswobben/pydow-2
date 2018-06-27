@@ -1,8 +1,8 @@
 import xml.etree.ElementTree as ET
 
-from pydow.store import Store
-from pydow.router import Router
-from pydow.events import EventDispatcher
+from pydow.store.filestore import Store
+from pydow.router.router import Router
+from pydow.events.dispatcher import EventDispatcher
 from pydow.core.helpers import h
 
 from typing import TypeVar

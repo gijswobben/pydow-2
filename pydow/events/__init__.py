@@ -1,3 +1,3 @@
-from pydow.events.event_dispatcher import EventDispatcher
+from pydow.events.dispatcher import EventDispatcher
 
 __all__ = ["EventDispatcher"]

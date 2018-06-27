@@ -1,3 +1,3 @@
-from pydow.store.store import Store
+from pydow.store.filestore import Store
 
 __all__ = ["Store"]

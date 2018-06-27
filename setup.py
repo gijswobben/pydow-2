@@ -1,5 +1,6 @@
 import os
 from setuptools import setup
+from version import __version__
 
 
 def read(fname):
@@ -8,22 +9,36 @@ def read(fname):
 
 setup(
     name="pydow",
-    version="0.0.1",
+    version=__version__,
     author="Gijs Wobben",
-    author_email="andrewjcarter@gmail.com",
+    author_email="gijswobben@gmail.com",
     description=(
-        "An demonstration of how to create, document, and publish "
-        "to the cheese shop a5 pypi.org."
+        "virtual DOM in the shadow."
     ),
-    license="BSD",
+    license="MIT",
     keywords="example documentation tutorial",
     url="http://packages.python.org/pydow",
-    packages=["pydow", "tests"],
+    packages=[
+        "pydow",
+        "pydow.components",
+        "pydow.components.button",
+        "pydow.components.input",
+        "pydow.core",
+        "pydow.events",
+        "pydow.plugins",
+        "pydow.router",
+        "pydow.router.link",
+        "pydow.router.router",
+        "pydow.store"
+    ],
+    install_requires=[
+        "flask",
+        "flask-socketio"
+    ],
     tests_require=["pytest"],
     long_description=read("README.md"),
     classifiers=[
         "Development Status :: 3 - Alpha",
-        "Topic :: Utilities",
-        "License :: OSI Approved :: BSD License",
+        "Topic :: Utilities"
     ],
 )
