@@ -1,0 +1,7 @@
+flake8==3.5.0
+pytest==3.2.1
+pytest-cov==2.5.1
+
+flask==1.0.2
+flask_socketio==3.0.1
+jinja2==2.10
