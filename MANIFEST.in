@@ -1,3 +1,5 @@
-include .html
-include .js
-include pydow/public/*
+recursive-include pydow/public *
+
+recursive-include pydow/ *.html
+recursive-include pydow/ *.css
+recursive-include pydow/ *.js
