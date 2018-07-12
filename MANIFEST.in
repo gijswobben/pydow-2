@@ -1,2 +1,3 @@
 include .html
 include .js
+include pydow/public/*

@@ -55,6 +55,8 @@ class App(object):
             os.path.join(os.path.dirname(__file__), template_folder)
         )
 
+        print("TEMPLATE_FOLDER:", self.template_folder)
+
         # Register any plugins in the plugin folder
         self.registerPlugins()
 
@@ -243,7 +245,7 @@ class App(object):
                     )
 
                 return render_template(
-                    os.path.abspath(os.path.join(os.path.dirname(__file__), "../index.html")),
+                    "index.html",
                     title=self.title,
                     extend_head=self.extend_head,
                     custom_javascript=self.custom_javascript,
