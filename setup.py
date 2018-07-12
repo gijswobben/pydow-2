@@ -13,21 +13,14 @@ setup(
     version=__version__,
     author="Gijs Wobben",
     author_email="gijswobben@gmail.com",
-    description=(
-        "virtual DOM in the shadow."
-    ),
+    description=("virtual DOM in the shadow."),
     license="MIT",
     keywords="example documentation tutorial",
     url="http://packages.python.org/pydow",
     packages=find_packages(),
-    install_requires=[
-        "flask",
-        "flask-socketio"
-    ],
+    install_requires=["flask", "flask-socketio"],
     tests_require=["pytest"],
     long_description=read("README.md"),
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Topic :: Utilities"
-    ],
+    classifiers=["Development Status :: 3 - Alpha", "Topic :: Utilities"],
+    include_package_data=True,
 )
