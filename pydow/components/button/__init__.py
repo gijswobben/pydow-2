@@ -14,7 +14,7 @@ class Button(Component):
         super(Button, self).__init__(template_location=__file__, *args, **kwargs)
 
         # Add things that can be rendered
-        self.components = {
+        self.bindings = {
             "content": self.content if hasattr(self, "content") else "Button"
         }
 

@@ -2,7 +2,7 @@ class BasePlugin(object):
     """ Class that can be used to build new plugins.
     """
 
-    def __init__(self: object, app, vdom, *args: list, **kwargs: dict) -> None:
+    def __init__(self: object, app, vdom, config, *args: list, **kwargs: dict) -> None:
         """ Initialization of the plugin. Adds some attributes to the plugin (like
             the app context and vdom) and runs the registration method of the plugin.
         """
@@ -10,6 +10,7 @@ class BasePlugin(object):
         # Add attributes to the plugin
         self.app = app
         self.vdom = vdom
+        self.config = config
 
         # Register the plugin
         self.registerPlugin()

@@ -5,9 +5,11 @@ class EventDispatcher(object):
     """ Generic event dispatcher which listen and dispatch events
     """
 
-    def __init__(self: object) -> None:
+    def __init__(self: object, *args: list, **kwargs: dict) -> None:
         """ Initialize the event dispatcher.
         """
+
+        super(EventDispatcher, self).__init__(*args, **kwargs)
 
         # Create an empty set of events
         self._events = dict()
@@ -52,12 +54,17 @@ class EventDispatcher(object):
             for listener in listeners:
                 listener(event)
 
-    def addEventListener(self: object, event_type: str, listener: Callable) -> None:
+    def addEventListener(self: object, event_type: str, listener: Callable, ensure_single: bool = False) -> None:
         """ Add an event listener for an event type.
         """
 
         # Add listener to the event type
         if not self.hasEventListener(event_type, listener):
+
+            # Make sure there is only a single listener for this event type
+            if ensure_single:
+                if event_type in self._events.keys():
+                    return False
 
             # Get the current listeners
             listeners = self._events.get(event_type, [])

@@ -11,26 +11,34 @@ class Router(Component):
         """ Initialization of the router.
         """
 
-        # Provide a default route
-        self.current_route = "/"
-
         # Initialize the component
         super(Router, self).__init__(template_location=__file__, *args, **kwargs)
 
-        self.components = {"content": self.routes.get(self.current_route, "/")}
+        self.bindings = {
+            "getContent": self.getContent
+        }
 
         # Register for all navigation events
         self.dispatcher.addEventListener("NAVIGATION_EVENT", self.changeRoute)
+
+    def getContent(self, session_id):
+        current_route = self.store.getState(f"ROUTER_CURRENT_ROUTE_{session_id}", "/")
+        return self.routes.get(current_route["target"])(session_id=session_id)
 
     def changeRoute(self: object, event: dict) -> None:
         """ Method that handles updates to the url.
         """
 
-        # Get the current location from the navigation event
-        self.current_route = event.get("target", "/")
+        session_id = event.get("session_id")
 
-        # Set the content to the new route
-        self.components["content"] = self.routes.get(self.current_route, "/")
+        target = event.get("target")
+        search = event.get("search")
+        anchor = event.get("anchor")
 
-    def update(self: object, *args: list, **kwargs: dict) -> None:
-        self.components["content"] = self.routes.get(self.current_route, "/")
+        route = {
+            "target": target,
+            "search": search,
+            "anchor": anchor
+        }
+
+        self.store.setState(f"ROUTER_CURRENT_ROUTE_{session_id}", route)

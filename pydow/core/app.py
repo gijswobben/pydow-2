@@ -1,6 +1,7 @@
 import os
 import sys
 import uuid
+import configparser
 
 from flask import Flask
 from flask import session
@@ -31,11 +32,17 @@ class App(object):
         public_folder: str = "./public",
         plugin_folder: str = "./plugins",
         template_folder: str = "../public",
+        configuration_file: str = "./server.conf",
         *args: list,
         **kwargs: dict,
     ) -> None:
         """ Initialization of the app.
         """
+
+        # Get the configuration
+        self.configuration_file = configuration_file
+        self.config = configparser.ConfigParser()
+        self.config.read(os.path.abspath(self.configuration_file))
 
         # Store the input parameters
         self.vdom = vdom
@@ -86,7 +93,8 @@ class App(object):
 
                 # Import the module
                 mod = __import__(fname)
-                plugins[fname] = mod.Plugin(app=self, vdom=self.vdom)
+                config = self.config[f"plugins:{fname}"] if f"plugins:{fname}" in self.config else None
+                plugins[fname] = mod.Plugin(app=self, vdom=self.vdom, config=config)
 
         self.plugins = plugins
 
@@ -96,20 +104,32 @@ class App(object):
 
         app = Flask(__name__, template_folder=self.template_folder)
         app.config["SECRET_KEY"] = "secret!"
-        socketio = SocketIO(app, manage_session=True)
+        socketio = SocketIO(app, manage_session=True, async_mode='threading')
 
         def sendStateUpdate(event: dict) -> None:
             session_id = event.get("session_id")
             emit("VDOM_UPDATE", self.vdom.toDict(session_id=session_id))
 
         def sendNavigationUpdate(event: dict) -> None:
-            emit("NAVIGATION_EVENT", {"target": event.get("target", "/")})
+            target = event.get("target", "/")
+            search = event.get("search", "")
+
+            if search == "" or search is None:
+                target = f"{target}"
+            elif search.startswith("?"):
+                target = f"{target}{search}"
+            else:
+                target = f"{target}?{search}"
+
+            emit("NAVIGATION_EVENT", {"target": target})
 
         def sendClearInputField(event: dict) -> None:
             emit("CLEAR_INPUT_FIELD", {"identifier": event.get("identifier", "")})
 
         def defaultSend(event: dict) -> None:
-            emit(event.get("type", ""), event)
+            print("TRIGGER", event)
+            with app.test_request_context('/'):
+                socketio.emit(event.get("type", ""), event)
 
         # Add some event listeners to send updates to the browser
         self.vdom.dispatcher.addEventListener("STATE_UPDATE_EVENT", sendStateUpdate)
@@ -123,6 +143,15 @@ class App(object):
             """
 
             session["session_id"] = str(uuid.uuid4())
+
+        @socketio.on("REQUEST_SESSION")
+        def handle_requestSession(event):
+            emit("STORE_SESSION", {"session_id": session["session_id"]})
+
+        @socketio.on("RESTORE_SESSION")
+        def handle_restoreSession(event):
+            print("Restoring session:", event)
+            session["session_id"] = event.get("session_id")
 
         @socketio.on("DOM_EVENT")
         def handle_dom_event(json: dict) -> None:
@@ -169,12 +198,16 @@ class App(object):
                         {
                             "type": "NAVIGATION_EVENT",
                             "target": json.get("link_target", "/"),
+                            "search": json.get("link_search", None),
+                            "anchor": json.get("link_anchor", None),
                             "session_id": session["session_id"],
                         }
                     )
 
                 else:
                     print(f"Recieved an unhandled event: {json}")
+            else:
+                print(f"Recieved an unhandled event: {json}")
 
             # Update the DOM after the event has been handled
             # TODO: Reduce the number of refresh (only when the vdom actually changed)
@@ -182,32 +215,38 @@ class App(object):
                 {"type": "STATE_UPDATE_EVENT", "session_id": session["session_id"]}
             )
 
+        @socketio.on("DEFAULT")
+        def handle_all_json(json):
+            json["session_id"] = session["session_id"]
+            print("Dispatching DEFAULT event")
+            self.vdom.dispatcher.dispatchEvent(json)
+
         @app.route("/", defaults={"path": ""})
         @app.route("/<path:path>")
         def catch_all(path: str) -> str:
             """ Catch all routes and redirect them to the index page
                 where the Router takes over the rest of the navigation.
             """
+            with app.test_request_context():
+                if path == "public/index.js":
+                    return send_from_directory(
+                        os.path.abspath(
+                            os.path.join(os.path.dirname(__file__), "../public")
+                        ),
+                        "index.js",
+                    )
 
-            if path == "public/index.js":
-                return send_from_directory(
-                    os.path.abspath(
-                        os.path.join(os.path.dirname(__file__), "../public")
-                    ),
-                    "index.js",
+                # Serve from the users public path
+                if path.startswith("public/"):
+                    return send_from_directory(
+                        os.path.abspath(self.public_folder), path[7:]
+                    )
+
+                return render_template(
+                    "index.html",
+                    title=self.title,
+                    extend_head=self.extend_head,
+                    custom_javascript=self.custom_javascript,
                 )
-
-            # Serve from the users public path
-            if path.startswith("public/"):
-                return send_from_directory(
-                    os.path.abspath(self.public_folder), path[7:]
-                )
-
-            return render_template(
-                "index.html",
-                title=self.title,
-                extend_head=self.extend_head,
-                custom_javascript=self.custom_javascript,
-            )
 
         return socketio, app

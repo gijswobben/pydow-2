@@ -1,3 +1,9 @@
+let session_id = null
+
+if (typeof(Storage) !== "undefined") {
+    session_id = localStorage.getItem("session_id")
+}
+
 // Set constants
 const DEBUG = false
 const DOM_EVENTS = {
@@ -247,6 +253,17 @@ let socket = io.connect('http://' + document.domain + ':' + location.port)
 
 // Handle connection events
 socket.on('connect', function() {
+    if (session_id) {
+        socket.emit("RESTORE_SESSION", {"session_id": session_id})
+    } else {
+        socket.emit("REQUEST_SESSION", {})
+    }
+})
+
+socket.on('STORE_SESSION', function(event) {
+    session_id = event["session_id"]
+    localStorage.setItem("session_id", session_id)
+    console.log("Store the session id in local storage")
 })
 
 // Handle the incoming VDOM when an update is received
@@ -279,6 +296,7 @@ socket.on('CLEAR_INPUT_FIELD', function(details) {
     clearInputField(details["identifier"])
 })
 
+
 // Loop over the enabled DOM events
 for (DOMEvent in DOM_EVENTS){
 
@@ -307,7 +325,7 @@ for (DOMEvent in DOM_EVENTS){
 
             // Handle specific cases first
             if (DOMEventCategory == "UIEvent load"){
-                message = Object.assign({}, message, {'link_target': location.pathname})
+                message = Object.assign({}, message, {'link_target': location.pathname, "link_search": location.search, "link_anchor": location.hash})
             } else {
                 message = Object.assign({}, message, {
                     'target': identifier || '',
@@ -322,3 +340,7 @@ for (DOMEvent in DOM_EVENTS){
     })
 
 }
+
+window.addEventListener("popstate", function(event) {
+    socket.emit('DOM_EVENT', {"DOMEventCategory": "UIEvent load", "link_target": location.pathname, "link_search": location.search, "link_anchor": location.hash})
+})

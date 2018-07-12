@@ -1,0 +1,13 @@
+<div>
+
+	{% if label is not none %}
+		<label for="{{ identifier }}">{{ label }}</label>
+	{% endif %}
+
+	<select id="{{ identifier }}">
+		{% for option in getOptions(session_id=session_id) %}
+			<option value="{{ option.value }}" {{ "selected='selected'" if option.value == default else "" }}>{{ option.name }}</option>
+		{% endfor %}
+	</select>
+
+</div>

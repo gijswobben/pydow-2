@@ -3,10 +3,14 @@ import uuid
 
 import xml.etree.ElementTree as ET
 
+from urllib.parse import parse_qs
+
 from jinja2 import Template
 from typing import TypeVar
 from typing import Union
 from typing import Optional
+
+from xml.etree.ElementTree import ParseError
 
 
 VirtualDOM_type = TypeVar("VirtualDOM")
@@ -68,8 +72,27 @@ class Component(object):
         self.identifier = identifier
         self.attributes = attributes
         self.router = router
+        if hasattr(parent, "router"):
+            self.router = parent.router
         self.template_location = template_location
         self.template_file = template_file
+        self.context = parent.context
+
+    def getURLSearchParameters(self: object, session_id: str) -> dict:
+        """ Method that retrieves and parses URL search parameters.
+        """
+
+        # Get the current route from the router
+        current_route = self.store.getState(f"ROUTER_CURRENT_ROUTE_{session_id}", {})
+        search_parameters = current_route.get("search", None)
+
+        # Return an empty dict if no parameters were found
+        if search_parameters is None:
+            return {}
+
+        # Parse and return
+        else:
+            return(parse_qs(search_parameters.strip("?")))
 
     def render(self: object, *args: list, **kwargs: dict) -> str:
         """ Render the component into valid HTML
@@ -85,10 +108,17 @@ class Component(object):
 
         # Open the template file and put the content into a Jinja template
         with open(filename) as file_:
-            template = Template(file_.read())
+            template_content = file_.read()
+            template = Template(template_content)
 
         # Use the regular render method to render the component into HTML
-        rendered = template.render(self.components, *args, **kwargs)
+        try:
+            rendered = template.render(self.bindings, *args, **kwargs)
+        except ParseError as e:
+            print(e)
+            print("Bindings:", self.bindings)
+            print("Template:", template_content)
+            raise
 
         # Parse the new HTML
         root = ET.fromstring(rendered)

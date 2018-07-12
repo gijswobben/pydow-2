@@ -18,14 +18,16 @@ class VirtualDOM(object):
     """
 
     def __init__(
-        self: object, root_class: Generic[Component_type], routes: dict
+        self: object, root_class: Generic[Component_type], routes: dict, context: dict = {}
     ) -> None:
         """ Initialization of the virtual DOM
         """
 
         # Store the input parameters
         self.dispatcher = EventDispatcher()
+        self.dispatcher
         self.store = Store()
+        self.context = context
 
         # Create the router
         self.router = Router(
