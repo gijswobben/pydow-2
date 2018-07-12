@@ -243,7 +243,7 @@ class App(object):
                     )
 
                 return render_template(
-                    "index.html",
+                    os.path.abspath(os.path.join(os.path.dirname(__file__), "../index.html")),
                     title=self.title,
                     extend_head=self.extend_head,
                     custom_javascript=self.custom_javascript,
