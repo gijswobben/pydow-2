@@ -1,5 +1,7 @@
 from pydow.core import Component
 
+from blinker import signal
+
 
 class Button(Component):
     """ Component that renders a button on the page and adds onClick behaviour
@@ -13,6 +15,9 @@ class Button(Component):
         # Initialize like any other component and point to the template location (this folder)
         super(Button, self).__init__(template_location=__file__, *args, **kwargs)
 
+        # Specific signals for this button
+        self.signal_on_click = signal(f"ON_CLICK_{self.identifier}")
+
         # Add things that can be rendered
         self.bindings = {
             "content": self.content if hasattr(self, "content") else "Button"
@@ -22,6 +27,4 @@ class Button(Component):
         if hasattr(self, "onClick"):
             on_click_method = self.onClick
             if on_click_method is not None:
-                self.dispatcher.addEventListener(
-                    f"ON_CLICK_{self.identifier}", on_click_method
-                )
+                self.signal_on_click.connect(on_click_method)

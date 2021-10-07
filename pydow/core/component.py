@@ -1,7 +1,8 @@
 import os
 import uuid
 
-import xml.etree.ElementTree as ET
+# import xml.etree.ElementTree as ET
+from lxml import etree
 
 from urllib.parse import parse_qs
 
@@ -16,6 +17,7 @@ from xml.etree.ElementTree import ParseError
 VirtualDOM_type = TypeVar("VirtualDOM")
 Component_type = TypeVar("Component")
 Router_type = TypeVar("Router")
+parser = etree.XMLParser(recover=True)
 
 
 class Component(object):
@@ -31,6 +33,7 @@ class Component(object):
         router: Optional[Router_type] = None,
         template_location: str = "./templates",
         template_file: str = "./template.html",
+        no_wrap: bool = False,
         *args: list,
         **kwargs: dict
     ) -> None:
@@ -64,7 +67,6 @@ class Component(object):
         elif "identifier" in attributes:
             identifier = attributes.get("identifier")
 
-        self.dispatcher = parent.dispatcher
         self.store = parent.store
 
         # Store the input parameters
@@ -77,14 +79,15 @@ class Component(object):
         self.template_location = template_location
         self.template_file = template_file
         self.context = parent.context
+        self.no_wrap = no_wrap
 
     def getURLSearchParameters(self: object, session_id: str) -> dict:
         """ Method that retrieves and parses URL search parameters.
         """
 
         # Get the current route from the router
-        current_route = self.store.getState(f"ROUTER_CURRENT_ROUTE_{session_id}", {})
-        search_parameters = current_route.get("search", None)
+        current_route = self.store.getState(f"ROUTER_CURRENT_ROUTE", {}, session_id=session_id)
+        search_parameters = current_route.get("link_search", None)
 
         # Return an empty dict if no parameters were found
         if search_parameters is None:
@@ -98,6 +101,9 @@ class Component(object):
         """ Render the component into valid HTML
         """
 
+        if "session_id" not in kwargs:
+            kwargs["session_id"] = None
+
         # Make sure everything is up-to-date before rendering
         self.update(*args, **kwargs)
 
@@ -109,25 +115,25 @@ class Component(object):
         # Open the template file and put the content into a Jinja template
         with open(filename) as file_:
             template_content = file_.read()
-            template = Template(template_content)
+            template = Template(f"{template_content}")
 
         # Use the regular render method to render the component into HTML
         try:
             rendered = template.render(self.bindings, *args, **kwargs)
-        except ParseError as e:
+        except Exception as e:
             print(e)
             print("Bindings:", self.bindings)
             print("Template:", template_content)
             raise
 
         # Parse the new HTML
-        root = ET.fromstring(rendered)
+        root = etree.fromstring(rendered, parser=parser)
 
         # Add the object identifier to the element
         root.set("identifier", self.identifier)
 
         # Get the current attributes of the element (from the template)
-        attributes = root.attrib
+        attributes = dict(root.attrib)
 
         # Loop over the attributes and add the other attributes to the root component
         for key, value in self.attributes.items():
@@ -139,9 +145,12 @@ class Component(object):
                 root.set(key, value)
 
         # Return the new HTML as string
-        return ET.tostring(root).decode("utf-8")
+        if self.no_wrap:
+            return etree.tostring(root).decode("utf-8")
+        else:
+            return f"<{self.tag}>" + etree.tostring(root).decode("utf-8") + f"</{self.tag}>"
 
-    def update(self: object, *args: list, **kwargs: dict) -> None:
+    def update(self: object, session_id=None, *args: list, **kwargs: dict) -> None:
         """ Default update method does nothing. Components may
             over write this method.
         """

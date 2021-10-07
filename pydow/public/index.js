@@ -235,6 +235,10 @@ function getIdentifier(event) {
     let attributes = target.attributes || {}
     let identifier = attributes.identifier || {}
     identifier = identifier.value
+
+    if (identifier == undefined){
+        identifier = target.id || ""
+    }
     return identifier
 }
 
@@ -253,11 +257,23 @@ let socket = io.connect('http://' + document.domain + ':' + location.port)
 
 // Handle connection events
 socket.on('connect', function() {
+
+    // Hide the overlay
+    document.getElementById("overlay").style.display = "none"
+
     if (session_id) {
         socket.emit("RESTORE_SESSION", {"session_id": session_id})
     } else {
         socket.emit("REQUEST_SESSION", {})
     }
+})
+
+socket.on('disconnect', function () {
+    document.getElementById("overlay").style.display = "block"
+})
+
+socket.on('reconnect', function() {
+    socket.emit('DOM_EVENT', {'DOMEventCategory': 'UIEvent load', 'link_target': location.pathname, "link_search": location.search, "link_anchor": location.hash})
 })
 
 socket.on('STORE_SESSION', function(event) {
@@ -288,7 +304,7 @@ socket.on('VDOM_UPDATE', function(new_dom) {
 
 // Reflect the change in location by pushing details to the history
 socket.on('NAVIGATION_EVENT', function(details) {
-    window.history.pushState({"details": details}, "", details["target"])
+    window.history.pushState({"details": details}, "", details["link_target"])
 })
 
 // Handle events to clear input fields
@@ -327,6 +343,7 @@ for (DOMEvent in DOM_EVENTS){
             if (DOMEventCategory == "UIEvent load"){
                 message = Object.assign({}, message, {'link_target': location.pathname, "link_search": location.search, "link_anchor": location.hash})
             } else {
+                console.log(event)
                 message = Object.assign({}, message, {
                     'target': identifier || '',
                     'value': value || ''
@@ -342,5 +359,6 @@ for (DOMEvent in DOM_EVENTS){
 }
 
 window.addEventListener("popstate", function(event) {
+    console.log(location)
     socket.emit('DOM_EVENT', {"DOMEventCategory": "UIEvent load", "link_target": location.pathname, "link_search": location.search, "link_anchor": location.hash})
 })

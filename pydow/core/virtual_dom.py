@@ -1,8 +1,8 @@
-import xml.etree.ElementTree as ET
+# import xml.etree.ElementTree as ET
+from lxml import etree
 
 from pydow.store.filestore import Store
 from pydow.router.router import Router
-from pydow.events.dispatcher import EventDispatcher
 from pydow.core.helpers import h
 
 from typing import TypeVar
@@ -11,6 +11,7 @@ from typing import Callable
 
 
 Component_type = TypeVar("Component")
+parser = etree.XMLParser(recover=True)
 
 
 class VirtualDOM(object):
@@ -24,8 +25,6 @@ class VirtualDOM(object):
         """
 
         # Store the input parameters
-        self.dispatcher = EventDispatcher()
-        self.dispatcher
         self.store = Store()
         self.context = context
 
@@ -65,7 +64,7 @@ class VirtualDOM(object):
 
             # Extract information from the elements
             element_type = element.tag
-            element_props = element.attrib
+            element_props = dict(element.attrib)
 
             # Check for nested elements
             if len(element) > 0:
@@ -87,7 +86,7 @@ class VirtualDOM(object):
         html = self.root_class.render(session_id=session_id)
 
         # Parse the HTML to an element tree
-        root = ET.fromstring(html)
+        root = etree.fromstring(html, parser=parser)
 
         # Use the helper method to run through the tree and create virtual DOM elements
         return _createVDOMElement(root)

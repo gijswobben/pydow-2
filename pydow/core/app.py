@@ -1,19 +1,30 @@
 import os
 import sys
-import uuid
 import configparser
 
 from flask import Flask
-from flask import session
-from flask import render_template
-from flask import send_from_directory
-
 from flask_socketio import emit
 from flask_socketio import SocketIO
 
 from typing import Generic
 from typing import TypeVar
 
+from .handlers import (
+    handle_connect,
+    handle_requestSession,
+    handle_restoreSession,
+    handle_dom_event,
+    handle_all_json,
+)
+
+from .routes import catch_all
+
+from pydow.signals import (
+    signal_navigation_event,
+    signal_state_update,
+    signal_clear_input_field_event,
+    signal_default_event,
+)
 
 # Define parameter types (for typing in Python)
 VirtualDOM_type = TypeVar("VirtualDOM")
@@ -31,6 +42,7 @@ class App(object):
         custom_javascript: str = "",
         public_folder: str = "./public",
         plugin_folder: str = "./plugins",
+        middleware_folder: str = "./middleware",
         template_folder: str = "../public",
         configuration_file: str = "./server.conf",
         *args: list,
@@ -48,17 +60,19 @@ class App(object):
         self.vdom = vdom
         self.title = title
         self.extend_head = extend_head
-        self.public_folder = public_folder
+        self.public_folder = os.path.abspath(public_folder)
         self.plugin_folder = plugin_folder
+        self.middleware_folder = middleware_folder
         self.custom_javascript = custom_javascript
         self.template_folder = os.path.abspath(
             os.path.join(os.path.dirname(__file__), template_folder)
         )
 
-        print("TEMPLATE_FOLDER:", self.template_folder)
-
         # Register any plugins in the plugin folder
         self.registerPlugins()
+
+        # Register any middleware in the middleware folder
+        self.registerMiddelWare()
 
         # Create the app from the provided VDOM object
         self.socketio, self.app = self.createApp()
@@ -95,160 +109,151 @@ class App(object):
 
                 # Import the module
                 mod = __import__(fname)
-                config = self.config[f"plugins:{fname}"] if f"plugins:{fname}" in self.config else None
+                config = (
+                    self.config[f"plugins:{fname}"]
+                    if f"plugins:{fname}" in self.config
+                    else None
+                )
                 plugins[fname] = mod.Plugin(app=self, vdom=self.vdom, config=config)
 
         self.plugins = plugins
 
-    def createApp(self: object) -> tuple:
-        """ Method that constructs the entire app.
+    def registerMiddelWare(self: object) -> None:
+        """
         """
 
-        app = Flask(__name__, template_folder=self.template_folder)
-        app.config["SECRET_KEY"] = "secret!"
-        socketio = SocketIO(app, manage_session=True, async_mode='threading')
+        # Add the plugin folder to the search path (this is relative to the users app)
+        sys.path.insert(0, self.middleware_folder)
 
-        def sendStateUpdate(event: dict) -> None:
-            session_id = event.get("session_id")
-            emit("VDOM_UPDATE", self.vdom.toDict(session_id=session_id))
+        middleware = {}
 
-        def sendNavigationUpdate(event: dict) -> None:
-            target = event.get("target", "/")
-            search = event.get("search", "")
+        if not os.path.isdir(self.middleware_folder):
+            self.middleware = middleware
+            return
 
-            if search == "" or search is None:
-                target = f"{target}"
-            elif search.startswith("?"):
-                target = f"{target}{search}"
-            else:
-                target = f"{target}?{search}"
+        # Detect middleware files
+        middleware_files = [
+            f
+            for f in os.listdir(self.middleware_folder)
+            if os.path.isfile(os.path.join(self.middleware_folder, f))
+        ]
 
-            emit("NAVIGATION_EVENT", {"target": target})
+        # Loop the plugin files
+        for middleware_file in middleware_files:
 
-        def sendClearInputField(event: dict) -> None:
-            emit("CLEAR_INPUT_FIELD", {"identifier": event.get("identifier", "")})
+            # Split the filename and extention and make sure it's Python code
+            fname, ext = os.path.splitext(middleware_file)
+            if ext == ".py":
 
-        def defaultSend(event: dict) -> None:
-            print("TRIGGER", event)
-            with app.test_request_context('/'):
-                socketio.emit(event.get("type", ""), event)
-
-        # Add some event listeners to send updates to the browser
-        self.vdom.dispatcher.addEventListener("STATE_UPDATE_EVENT", sendStateUpdate)
-        self.vdom.dispatcher.addEventListener("NAVIGATION_EVENT", sendNavigationUpdate)
-        self.vdom.dispatcher.addEventListener("CLEAR_INPUT_FIELD", sendClearInputField)
-        self.vdom.dispatcher.addEventListener("DEFAULT", defaultSend)
-
-        @socketio.on("connect")
-        def handle_connect() -> None:
-            """ Generate and store a session ID for every connect.
-            """
-
-            session["session_id"] = str(uuid.uuid4())
-
-        @socketio.on("REQUEST_SESSION")
-        def handle_requestSession(event):
-            emit("STORE_SESSION", {"session_id": session["session_id"]})
-
-        @socketio.on("RESTORE_SESSION")
-        def handle_restoreSession(event):
-            print("Restoring session:", event)
-            session["session_id"] = event.get("session_id")
-
-        @socketio.on("DOM_EVENT")
-        def handle_dom_event(json: dict) -> None:
-
-            if "DOMEventCategory" in json:
-
-                if json.get("DOMEventCategory", None) == "MouseEvent click":
-
-                    target_identifier = json.get("target", "")
-                    if target_identifier is not "":
-                        self.vdom.dispatcher.dispatchEvent(
-                            {
-                                "type": f"ON_CLICK_{target_identifier}",
-                                "session_id": session["session_id"],
-                            }
-                        )
-
-                elif (
-                    json.get("DOMEventCategory", None) == "Event input"
-                    or json.get("DOMEventCategory", None) == "Event change"
-                ):
-                    target_identifier = json.get("target", "")
-                    if target_identifier is not "":
-                        self.vdom.dispatcher.dispatchEvent(
-                            {
-                                "type": f"ON_CHANGE_{target_identifier}",
-                                "value": json.get("value", ""),
-                                "session_id": session["session_id"],
-                            }
-                        )
-
-                elif json.get("DOMEventCategory", None) == "Event submit":
-                    target_identifier = json.get("target", "")
-                    if target_identifier is not "":
-                        self.vdom.dispatcher.dispatchEvent(
-                            {
-                                "type": f"ON_FORM_SUBMIT_{target_identifier}",
-                                "session_id": session["session_id"],
-                            }
-                        )
-
-                elif json.get("DOMEventCategory", None) == "UIEvent load":
-                    self.vdom.dispatcher.dispatchEvent(
-                        {
-                            "type": "NAVIGATION_EVENT",
-                            "target": json.get("link_target", "/"),
-                            "search": json.get("link_search", None),
-                            "anchor": json.get("link_anchor", None),
-                            "session_id": session["session_id"],
-                        }
-                    )
-
-                else:
-                    print(f"Recieved an unhandled event: {json}")
-            else:
-                print(f"Recieved an unhandled event: {json}")
-
-            # Update the DOM after the event has been handled
-            # TODO: Reduce the number of refresh (only when the vdom actually changed)
-            self.vdom.dispatcher.dispatchEvent(
-                {"type": "STATE_UPDATE_EVENT", "session_id": session["session_id"]}
-            )
-
-        @socketio.on("DEFAULT")
-        def handle_all_json(json):
-            json["session_id"] = session["session_id"]
-            print("Dispatching DEFAULT event")
-            self.vdom.dispatcher.dispatchEvent(json)
-
-        @app.route("/", defaults={"path": ""})
-        @app.route("/<path:path>")
-        def catch_all(path: str) -> str:
-            """ Catch all routes and redirect them to the index page
-                where the Router takes over the rest of the navigation.
-            """
-            with app.test_request_context():
-                if path == "public/index.js":
-                    return send_from_directory(
-                        os.path.abspath(
-                            os.path.join(os.path.dirname(__file__), "../public")
-                        ),
-                        "index.js",
-                    )
-
-                # Serve from the users public path
-                if path.startswith("public/"):
-                    return send_from_directory(
-                        os.path.abspath(self.public_folder), path[7:]
-                    )
-
-                return render_template(
-                    "index.html",
-                    title=self.title,
-                    extend_head=self.extend_head,
-                    custom_javascript=self.custom_javascript,
+                # Import the module
+                mod = __import__(fname)
+                config = (
+                    self.config[f"middleware:{fname}"]
+                    if f"middleware:{fname}" in self.config
+                    else None
                 )
+                if config.getboolean("enabled", fallback=True):
+                    middleware[fname] = mod.MiddleWare(
+                        app=self, vdom=self.vdom, config=config
+                    )
 
-        return socketio, app
+        self.middleware = middleware
+
+    def runMiddleWare(self: object, *args: list, **kwargs: dict) -> None:
+        """ Method that triggers the middleware at every request.
+        """
+
+        for name, middleware in self.middleware.items():
+            print(f"Running middleware {name}")
+            middleware.run(*args, **kwargs)
+
+    def _sendStateUpdate(self: object, event: dict, *args, **kwargs) -> None:
+        """ Method that emits updates to the VDOM to the browser.
+        """
+        session_id = event.get("session_id")
+        emit("VDOM_UPDATE", self.vdom.toDict(session_id=session_id))
+
+    def _sendNavigationUpdate(self: object, event: dict) -> None:
+        """ Helper method that sends navigation update events to the browser.
+        """
+
+        # Run any middleware when changing pages
+        self.runMiddleWare(session_id=event.get("session_id"))
+
+        # Extract information about where we're going
+        target = event.get("link_target", "/")
+        search = event.get("link_search", "")
+
+        # Construct the url
+        if search == "" or search is None:
+            target = f"{target}"
+        elif search.startswith("?"):
+            target = f"{target}{search}"
+        else:
+            target = f"{target}?{search}"
+
+        # Emit the navigation change to the browser
+        emit("NAVIGATION_EVENT", {"link_target": target})
+
+    def _defaultSend(self: object, event: dict) -> None:
+        """ Fallback method for any unknown event that should be send to the browser.
+        """
+        with self.app.test_request_context("/"):
+            self.socketio.emit(event.get("type", ""), event)
+
+    def _sendClearInputField(self: object, event: dict) -> None:
+        """ Specific method for emitting an event to clear an input field in the browser.
+        """
+        emit("CLEAR_INPUT_FIELD", {"identifier": event.get("identifier", "")})
+
+    def createApp(self: object) -> tuple:
+        """ Method that constructs the entire app (assembly).
+        """
+
+        # Create the Flask app and Socket
+        self.app = Flask(__name__, template_folder=self.template_folder)
+        self.app.config["SECRET_KEY"] = "secret!"
+        self.socketio = SocketIO(self.app, manage_session=True, async_mode="threading")
+
+        # Register callbacks for different event signals
+        signal_state_update.connect(self._sendStateUpdate, weak=False)
+        signal_navigation_event.connect(self._sendNavigationUpdate, weak=False)
+        signal_clear_input_field_event.connect(self._sendClearInputField, weak=False)
+        signal_default_event.connect(self._defaultSend, weak=False)
+
+        # Register SocketIO events
+        self.socketio.on_event("connect", handle_connect)
+        self.socketio.on_event("REQUEST_SESSION", handle_requestSession)
+        self.socketio.on_event("RESTORE_SESSION", handle_restoreSession)
+        self.socketio.on_event("DEFAULT", handle_all_json)
+        self.socketio.on_event("DOM_EVENT", handle_dom_event)
+
+        # Add url routes for the Flask app
+        self.app.add_url_rule(
+            "/<path:path>",
+            "catch_all",
+            defaults={
+                "app": self.app,
+                "public_folder": self.public_folder,
+                "title": self.title,
+                "extend_head": self.extend_head,
+                "custom_javascript": self.custom_javascript,
+            },
+            view_func=catch_all,
+        )
+        self.app.add_url_rule(
+            "/",
+            "catch_all",
+            defaults={
+                "path": "",
+                "app": self.app,
+                "public_folder": self.public_folder,
+                "title": self.title,
+                "extend_head": self.extend_head,
+                "custom_javascript": self.custom_javascript,
+            },
+            view_func=catch_all,
+        )
+
+        # Return the socket and app
+        return self.socketio, self.app

@@ -12,12 +12,30 @@ class Store(dict):
         # Create the object that will hold the state (in memory) for the entire application
         self._data = {}
 
-    def getState(self: object, key: str, default=None):
+    def getState(self: object, key: str, default=None, session_id: str = None, identifier: str = None):
         """ Helper method the retrieve a state.
         """
+
+        # If a session key is provided, use it to postfix the key
+        if session_id is not None:
+            key = f"{key}_{session_id}"
+
+        if identifier is not None:
+            key = f"{key}_{identifier}"
+
+        # Return the value
         return self._data.get(key, default)
 
-    def setState(self: object, key: str, value):
+    def setState(self: object, key: str, value, session_id: str = None, identifier: str = None):
         """ Helper method to store a state.
         """
+
+        # If a session key is provided, use it to postfix the key
+        if session_id is not None:
+            key = f"{key}_{session_id}"
+
+        if identifier is not None:
+            key = f"{key}_{identifier}"
+
+        # Set the value in the state
         self._data[key] = value

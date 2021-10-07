@@ -1,4 +1,7 @@
 from pydow.core.component import Component
+from pydow.signals import signal_navigation_event
+
+from blinker import signal
 
 
 class Link(Component):
@@ -11,7 +14,10 @@ class Link(Component):
         """
 
         # Initialize the component
-        super(Link, self).__init__(template_location=__file__, *args, **kwargs)
+        super(Link, self).__init__(template_location=__file__, tag="pydow_link", *args, **kwargs)
+
+        # Specify specific signals
+        self.signal_on_click = signal(f"ON_CLICK_{self.identifier}")
 
         # Create elements that can be rendered by the template
         self.bindings = {"content": self.content if hasattr(self, "content") else ""}
@@ -30,12 +36,11 @@ class Link(Component):
             self.search = parts[1]
 
         # Create the onClick behaviour
-        self.dispatcher.addEventListener(f"ON_CLICK_{self.identifier}", self.onClick)
+        # self.dispatcher.addEventListener(f"ON_CLICK_{self.identifier}", self.onClick)
+        self.signal_on_click.connect(self.onClick, weak=False)
 
     def onClick(self: object, event: dict) -> None:
         """ Default onClick handler.
         """
 
-        self.dispatcher.dispatchEvent(
-            {"type": "NAVIGATION_EVENT", "target": self.target, "search": self.search, "session_id": event.get("session_id")}
-        )
+        signal_navigation_event.send({"link_target": self.target, "link_search": self.search, "session_id": event.get("session_id")})
